@@ -1,0 +1,57 @@
+﻿<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SuspiciousLinkRadar • URL Güvenlik Kontrolü</title>
+  <link rel="stylesheet" href="/static/styles.css"/>
+</head>
+<body>
+  <main class="container">
+    <h1>SuspiciousLinkRadar</h1>
+    <p class="subtitle">Bir URL'nin risk durumunu hızlıca kontrol edin.</p>
+
+    <form id="form" class="panel" onsubmit="return false;">
+      <label for="url" class="label">URL</label>
+      <div class="url-row">
+        <input id="url" type="url" placeholder="https://örnek.com/giris?ref=mail" required />
+        <button id="check" type="button">Kontrol Et</button>
+      </div>
+
+      <div class="threshold">
+        <label for="threshold">Eşik: <span id="th-val">0.80</span></label>
+        <input id="threshold" type="range" min="0.50" max="0.95" step="0.01" value="0.80" />
+      </div>
+    </form>
+
+    <section id="status" class="status status--idle">
+      <div class="status__title">Hazır</div>
+      <div class="status__desc">Bir URL girin ve Kontrol Et'e basın.</div>
+    </section>
+
+    <section class="details panel">
+      <div class="grid">
+        <div>
+          <div class="k">Etiket</div>
+          <div id="label" class="v">—</div>
+        </div>
+        <div>
+          <div class="k">Olasılık</div>
+          <div id="prob" class="v"></div>
+        </div>
+        <div>
+          <div class="k">Risk</div>
+          <div id="risk" class="v">—</div>
+        </div>
+      </div>
+      <pre id="raw" class="raw"></pre>
+    </section>
+
+    <footer>
+      <small>Model yüklü değilse API 503 dönebilir. Önce modeli eğitip kaydedin.</small>
+    </footer>
+  </main>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>

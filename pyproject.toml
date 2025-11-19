@@ -1,0 +1,20 @@
+﻿[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "suspicious-link-radar"
+version = "1.0.0"
+description = "ML based malicious URL detection API"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "scikit-learn",
+    "pandas",
+    "tldextract",
+    "joblib"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["slr*", "app*"]
