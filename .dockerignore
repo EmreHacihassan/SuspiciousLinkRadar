@@ -1,0 +1,33 @@
+﻿# Git
+.git
+.gitignore
+
+# Python Cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual Env
+venv
+.venv
+env
+
+# IDE
+.vscode
+.idea
+
+# Test & Logs
+tests
+.pytest_cache
+*.log
+.coverage
+
+# Data & Models (İmajı şişirmemek için)
+data/raw
+models/*.pkl
+models/*.joblib
+*.ipynb
+*.md
+Dockerfile
+.dockerignore

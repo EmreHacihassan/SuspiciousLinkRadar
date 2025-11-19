@@ -5,7 +5,7 @@
   <title>Suspicious Link Radar | Cyber Racing Cockpit</title>
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div class="cockpit">
@@ -60,10 +60,10 @@
     <main class="command-center">
       <div class="dashboard-header">
         <div class="brand-strip">
-  <img src="/static/logo.svg" alt="Suspicious Link Radar Logo" class="brand-logo" />
-  <div class="brand-name">SUSPICIOUS LINK RADAR</div>
-  <div class="version-tag" id="uiVersion">UI-R2</div>
-</div>
+          <div class="brand-icon">⚡</div>
+          <div class="brand-name">SUSPICIOUS LINK RADAR</div>
+          <div class="version-tag" id="uiVersion">UI-R2</div>
+        </div>
         <div class="status-bar">
           <div class="status-item" id="statusSecurity">SECURE</div>
           <div class="status-item" id="statusMode">NORMAL</div>
@@ -239,6 +239,6 @@
     </div>
   </div>
 
-  <script src="/static/script.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>

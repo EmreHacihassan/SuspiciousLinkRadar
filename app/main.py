@@ -1,64 +1,115 @@
-﻿# app/main.py
-from __future__ import annotations
-import os, logging
+﻿from __future__ import annotations
+
+import sys
+import os
+import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 from contextlib import asynccontextmanager
+
+# -----------------------------------------------------------------------------
+# 1. Yol Ayarları (Path Fix) - En Kritik Bölüm
+# -----------------------------------------------------------------------------
+# Bu blok, 'python app/main.py' çalıştırıldığında 'slr' klasörünün
+# Python tarafından görülmesini sağlar.
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
+# -----------------------------------------------------------------------------
+# Yapılandırma
+# -----------------------------------------------------------------------------
+# Hızlı JSON kütüphanesi varsa onu kullan, yoksa standart olanı
 try:
-    import orjson  # noqa
+    import orjson
     from fastapi.responses import ORJSONResponse as DefaultJSONResponse
     JSON_BACKEND = "orjson"
-except Exception:
+except ImportError:
     from fastapi.responses import JSONResponse as DefaultJSONResponse
     JSON_BACKEND = "json"
 
-from slr.models.infer import load_artifact, predict_url
+MODELS_DIR: Path = ROOT_DIR / "models"
+DEFAULT_MODEL_PATH: Path = MODELS_DIR / "model_v1.0.pkl"
+STATIC_DIR: Path = Path(__file__).resolve().parent / "static"
 
-ROOT = Path(__file__).resolve().parents[1]
-MODELS_DIR = ROOT / "models"
-DEFAULT_MODEL_PATH = MODELS_DIR / "model_v1.0.pkl"
-STATIC_DIR = Path(__file__).resolve().parent / "static"
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S"
+)
+logger = logging.getLogger("SLR_API")
 
+# -----------------------------------------------------------------------------
+# SLR Modülünü İçe Aktarma
+# -----------------------------------------------------------------------------
+SLR_MODULE_AVAILABLE = False
+try:
+    from slr.models.infer import load_artifact, predict_url
+    SLR_MODULE_AVAILABLE = True
+except ImportError as e:
+    logger.error(f"⚠️ KRİTİK: 'slr' modülü yüklenemedi. Hata: {e}")
+    logger.error("👉 Çözüm: Terminalde 'pip install -e .' komutunu çalıştırın.")
+
+# -----------------------------------------------------------------------------
+# Veri Modelleri (Schema)
+# -----------------------------------------------------------------------------
 class PredictRequest(BaseModel):
-    url: str = Field()
-    threshold: Optional[float] = Field(default=0.80, ge=0.0, le=1.0)
+    url: str = Field(..., description="Analiz edilecek URL adresi", min_length=3)
+    threshold: float = Field(default=0.80, ge=0.0, le=1.0, description="Risk eşiği")
+
+    @field_validator("url")
+    @classmethod
+    def clean_url(cls, v: str) -> str:
+        return v.strip()
 
 class PredictResponse(BaseModel):
     label: str
     probability: float
     risk_level: str
 
-_ARTIFACT = None
+class HealthResponse(BaseModel):
+    status: str
+    model_loaded: bool
+    backend: str
+    version: str = "1.0.0"
+    model_config = ConfigDict(protected_namespaces=())
 
-def get_artifact():
-    global _ARTIFACT
-    if _ARTIFACT is None:
-        if not DEFAULT_MODEL_PATH.exists():
-            raise HTTPException(status_code=503, detail="Model artifact not found. Train the model first.")
-        try:
-            _ARTIFACT = load_artifact(str(DEFAULT_MODEL_PATH))
-        except Exception as e:
-            logging.getLogger("uvicorn.error").exception("Artifact load failed.")
-            raise HTTPException(status_code=500, detail=f"Artifact load error: {type(e).__name__}")
-    return _ARTIFACT
+# -----------------------------------------------------------------------------
+# Uygulama Başlatma/Durdurma (Lifespan)
+# -----------------------------------------------------------------------------
+_ARTIFACT: Optional[Dict[str, Any]] = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logging.getLogger("uvicorn.error").info(f"[startup] API hazır (JSON backend={JSON_BACKEND}, model lazy).")
-    try:
-        yield
-    finally:
-        logging.getLogger("uvicorn.error").info("[shutdown] API kapanıyor.")
+    global _ARTIFACT
+    logger.info(f"🚀 Suspicious Link Radar Başlatılıyor... (Backend: {JSON_BACKEND})")
+    
+    if SLR_MODULE_AVAILABLE:
+        if DEFAULT_MODEL_PATH.exists():
+            try:
+                _ARTIFACT = load_artifact(str(DEFAULT_MODEL_PATH))
+                logger.info(f"✅ Model başarıyla yüklendi: {DEFAULT_MODEL_PATH.name}")
+            except Exception as e:
+                logger.error(f"❌ Model dosyası bozuk olabilir: {e}")
+        else:
+            logger.warning(f"⚠️ Model dosyası bulunamadı: {DEFAULT_MODEL_PATH}")
+            logger.warning("👉 Tahminleme yapmak için önce modeli eğitmelisiniz (SLR.ipynb).")
+    
+    yield
+    logger.info("👋 Uygulama kapatılıyor.")
 
+# -----------------------------------------------------------------------------
+# FastAPI Kurulumu
+# -----------------------------------------------------------------------------
 app = FastAPI(
-    title="SuspiciousLinkRadar API",
+    title="Suspicious Link Radar",
     version="1.0.0",
     default_response_class=DefaultJSONResponse,
     lifespan=lifespan
@@ -66,56 +117,60 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://127.0.0.1:8080",
-        "http://127.0.0.1:8081",
-        "http://127.0.0.1:8090",
-        "http://localhost:8080",
-        "http://localhost:8081",
-        "http://localhost:8090",
-    ],
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_origins=["*"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+# -----------------------------------------------------------------------------
+# Endpointler
+# -----------------------------------------------------------------------------
 @app.get("/", include_in_schema=False)
-def index():
-    path = STATIC_DIR / "index.html"
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="index.html not found")
-    return FileResponse(str(path))
+def root():
+    return RedirectResponse(url="/static/index.html")
 
-@app.get("/health")
+@app.get("/health", response_model=HealthResponse)
 def health():
     return {
-        "status": "ok",
-        "model_exists": DEFAULT_MODEL_PATH.exists(),
-        "model_path": str(DEFAULT_MODEL_PATH),
-        "json_backend": JSON_BACKEND,
+        "status": "active",
+        "model_loaded": _ARTIFACT is not None,
+        "backend": JSON_BACKEND
     }
 
 @app.post("/predict", response_model=PredictResponse)
-def predict(req: PredictRequest):
-    if not isinstance(req.url, str) or not req.url.strip():
-        raise HTTPException(status_code=400, detail="Field 'url' must be a non-empty string")
-    artifact = get_artifact()
+def predict_endpoint(req: PredictRequest):
+    if not SLR_MODULE_AVAILABLE:
+        raise HTTPException(status_code=500, detail="Sunucu kurulum hatası: 'slr' modülü yok.")
+    
+    if _ARTIFACT is None:
+        raise HTTPException(status_code=503, detail="Model yüklü değil. Lütfen sistemi eğitin.")
+
     try:
-        out = predict_url(artifact, req.url, threshold=req.threshold if req.threshold is not None else 0.80)
-    except HTTPException:
-        raise
+        return predict_url(_ARTIFACT, req.url, threshold=req.threshold)
     except Exception as e:
-        logging.getLogger("uvicorn.error").exception("Prediction failed.")
-        raise HTTPException(status_code=500, detail=f"Inference error: {type(e).__name__}")
-    return PredictResponse(**out)
+        logger.error(f"Tahmin hatası: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-def run():
-    import uvicorn
-    host = os.getenv("SLR_HOST", "127.0.0.1")
-    port = int(os.getenv("SLR_PORT", os.getenv("PORT", "8080")))
-    reload_flag = os.getenv("SLR_RELOAD", "0") == "1"
-    uvicorn.run("app.main:app", host=host, port=port, reload=reload_flag, log_level="info")
-
+# -----------------------------------------------------------------------------
+# Başlatıcı
+# -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    run()
+    import uvicorn
+    
+    PORT = int(os.getenv("SLR_PORT", 8090))
+    HOST = os.getenv("SLR_HOST", "127.0.0.1")
+    
+    print(f"\n🔌 Sunucu: http://{HOST}:{PORT}")
+    print(f"💻 Arayüz: http://{HOST}:{PORT}/static/index.html\n")
+    
+    uvicorn.run(
+        "app.main:app", 
+        host=HOST, 
+        port=PORT, 
+        reload=True, 
+        reload_dirs=[str(ROOT_DIR)]
+    )
