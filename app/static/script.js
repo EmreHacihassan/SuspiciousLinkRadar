@@ -1,90 +1,112 @@
-﻿/* Suspicious Link Radar – Cyber Racing Cockpit JS
-   Uzun kapsamlı etkileşim mantığı
-   - Radar çizim & ping
-   - Tarama akışı & animasyon
-   - API isteği (FastAPI /predict)
-   - Metrik güncelleme (lineer + dairesel gauge)
-   - Toast & konsol log sistemi
-   - Tema / debug / modal
+﻿/* Suspicious Link Radar – Frontend
+   Tasarım korunur; istek gönderme ve telemetri gösterimi güçlendirildi.
 */
+(function () {
+  // ==== CONFIG (dinamik base URL + health) ====
+  const DEFAULT_PORT = 8081;
+  const API_BASE = resolveApiBase();
+  let apiHealthy = false;
 
-(function() {
-  // ---- DOM Seçimleri ----
-  const radarCanvas = document.getElementById('radarCanvas');
-  const radarContainer = document.getElementById('radarContainer');
-  const scanBtn = document.getElementById('scanBtn');
-  const urlInput = document.getElementById('urlInput');
-  const speedValue = document.getElementById('speedValue');
-  const telemetryPanel = document.getElementById('telemetryPanel');
-  const loadingState = document.getElementById('loadingState');
-  const gaugeNeedle = document.getElementById('gaugeNeedle');
-  const dialNeedle = document.getElementById('dialNeedle');
-  const telemetrySignal = document.getElementById('telemetrySignal');
-  const consoleStream = document.getElementById('consoleStream');
-  const toastStack = document.getElementById('toastStack');
-  const themeBtn = document.getElementById('themeBtn');
-  const debugBtn = document.getElementById('debugBtn');
-  const modalOverlay = document.getElementById('modalOverlay');
-  const modalTitle = document.getElementById('modalTitle');
-  const modalBody = document.getElementById('modalBody');
-  const modalCloseBtn = document.getElementById('modalCloseBtn');
+  function resolveApiBase() {
+    const loc = window.location;
+    if (loc.protocol === 'http:' || loc.protocol === 'https:') {
+      return loc.port ? `${loc.protocol}//${loc.hostname}:${loc.port}` : `${loc.protocol}//${loc.hostname}:${DEFAULT_PORT}`;
+    }
+    return `http://127.0.0.1:${DEFAULT_PORT}`;
+  }
 
-  // Metrikler
-  const metricClassification = document.getElementById('metricClassification');
-  const metricConfidence = document.getElementById('metricConfidence');
-  const metricThreatLevel = document.getElementById('metricThreatLevel');
-  const metricPhishing = document.getElementById('metricPhishing');
-  const metricMalware = document.getElementById('metricMalware');
-  const metricDeface = document.getElementById('metricDeface');
+  async function initialHealthCheck() {
+    const candidates = [`${API_BASE}/health`, `${API_BASE}/api/health`];
+    for (const url of candidates) {
+      try {
+        const res = await fetch(url, { cache: 'no-store' });
+        if (res.ok) {
+          apiHealthy = true;
+          setApiStatus('Hazır');
+          return;
+        }
+      } catch (_) {}
+    }
+    apiHealthy = false;
+    setApiStatus('Kapalı');
+    addConsoleLog('error', 'Health check başarısız: ' + API_BASE);
+    showToast('warn', 'Backend ulaşılamıyor. Önce sunucuyu başlatın.');
+  }
 
-  // Ek bilgiler
-  const scanCountEl = document.getElementById('scanCount');
-  const errorCountEl = document.getElementById('errorCount');
-  const themeStateEl = document.getElementById('themeState');
-  const statusPings = document.getElementById('statusPings');
-  const apiStatus = document.getElementById('apiStatus');
-  const apiLatency = document.getElementById('apiLatency');
-  const lastResponse = document.getElementById('lastResponse');
+  function setApiStatus(txt) {
+    const el = document.getElementById('apiStatus');
+    if (el) el.textContent = txt;
+  }
 
-  // Durum
+  // ---- DOM ----
+  const radarCanvas = id('radarCanvas');
+  const radarContainer = id('radarContainer');
+  const scanBtn = id('scanBtn');
+  const urlInput = id('urlInput');
+  const speedValue = id('speedValue');
+  const telemetryPanel = id('telemetryPanel');
+  const loadingState = id('loadingState');
+  const gaugeNeedle = id('gaugeNeedle');
+  const dialNeedle = id('dialNeedle');
+  const telemetrySignal = id('telemetrySignal');
+  const consoleStream = id('consoleStream');
+  const toastStack = id('toastStack');
+  const themeBtn = id('themeBtn');
+  const debugBtn = id('debugBtn');
+  const modalOverlay = id('modalOverlay');
+  const modalTitle = id('modalTitle');
+  const modalBody = id('modalBody');
+  const modalCloseBtn = id('modalCloseBtn');
+
+  // ---- Metrics ----
+  const metricClassification = id('metricClassification');
+  const metricConfidence = id('metricConfidence');
+  const metricThreatLevel = id('metricThreatLevel');
+  const metricPhishing = id('metricPhishing');
+  const metricMalware = id('metricMalware');
+  const metricDeface = id('metricDeface');
+
+  // ---- Session ----
+  const scanCountEl = id('scanCount');
+  const errorCountEl = id('errorCount');
+  const themeStateEl = id('themeState');
+  const statusPings = id('statusPings');
+  const apiStatus = id('apiStatus');
+  const apiLatency = id('apiLatency');
+  const lastResponse = id('lastResponse');
+
+  // ---- State ----
   let scanCount = 0;
   let errorCount = 0;
   let radarCtx;
-  let animationId;
   let pingCounter = 0;
   let themeMode = 'dark';
   let scanning = false;
   let artificialSpeed = 0;
 
-  // ---- Başlatıcı ----
+  // ---- Init ----
   function init() {
     prepareRadarCanvas();
-    addConsoleLog('info', 'Arayüz yüklendi.');
-    addConsoleLog('info', 'Hazır.');
+    addConsoleLog('info', 'UI hazır (BASE=' + API_BASE + ')');
     bindEvents();
-    // Opsiyonel: başlangıç pingi
     randomPingBurst(3);
-    // Fake totalRecords doldur (gerçek değer backend’den alınabiliyorsa AJAX eklenir)
     setText('totalRecords', '640K+');
     showToast('safe', 'Arayüz Hazır');
+    initialHealthCheck();
   }
 
-  // ---- Radar Canvas ----
+  // ---- Radar ----
   function prepareRadarCanvas() {
     radarCanvas.width = radarCanvas.clientWidth;
     radarCanvas.height = radarCanvas.clientHeight;
     radarCtx = radarCanvas.getContext('2d');
     drawStaticGrid();
   }
-
   function drawStaticGrid() {
-    const w = radarCanvas.width;
-    const h = radarCanvas.height;
+    const w = radarCanvas.width, h = radarCanvas.height;
     radarCtx.clearRect(0, 0, w, h);
     radarCtx.save();
     radarCtx.translate(w / 2, h / 2);
-
-    // Halkalar
     const rings = 5;
     for (let i = 1; i <= rings; i++) {
       const r = (Math.min(w, h) / 2) * (i / rings);
@@ -94,24 +116,18 @@
       radarCtx.lineWidth = 1;
       radarCtx.stroke();
     }
-
-    // Çapraz çizgiler
     for (let a = 0; a < 360; a += 30) {
       radarCtx.beginPath();
       radarCtx.moveTo(0, 0);
-      const rad = a * Math.PI / 180;
-      radarCtx.lineTo(
-        Math.cos(rad) * w / 2,
-        Math.sin(rad) * h / 2
-      );
+      const rad = (a * Math.PI) / 180;
+      radarCtx.lineTo(Math.cos(rad) * w / 2, Math.sin(rad) * h / 2);
       radarCtx.strokeStyle = 'rgba(255,69,0,0.15)';
       radarCtx.stroke();
     }
-
     radarCtx.restore();
   }
 
-  // ---- Ping Yerleştirme ----
+  // ---- Ping ----
   function placePing(xPercent, yPercent, threatScore) {
     const ping = document.createElement('div');
     ping.className = 'radar-ping';
@@ -123,23 +139,12 @@
     ping.style.animationDuration = (2 + threatScore) + 's';
     radarContainer.appendChild(ping);
     pingCounter++;
-    statusPings.textContent = `PINGS: ${pingCounter}`;
-
-    setTimeout(() => {
-      ping.remove();
-    }, 3500);
+    if (statusPings) statusPings.textContent = `PINGS: ${pingCounter}`;
+    setTimeout(() => { if (ping.isConnected) ping.remove(); }, 3500);
   }
+  function randomPingBurst(n = 1) { for (let i = 0; i < n; i++) placePing(10 + Math.random() * 80, 10 + Math.random() * 80, Math.random()); }
 
-  function randomPingBurst(n = 1) {
-    for (let i = 0; i < n; i++) {
-      const xp = 10 + Math.random() * 80;
-      const yp = 10 + Math.random() * 80;
-      const ts = Math.random();
-      placePing(xp, yp, ts);
-    }
-  }
-
-  // ---- Tarama Süreci ----
+  // ---- Scan Flow ----
   async function startScan() {
     if (scanning) return;
     const targetUrl = urlInput.value.trim();
@@ -148,36 +153,35 @@
       urlInput.focus();
       return;
     }
-
+    if (!apiHealthy) {
+      addConsoleLog('error', 'Backend kapalı veya ulaşılamıyor: ' + API_BASE);
+      showToast('danger', 'Önce backend’i başlatın (uvicorn).');
+      return;
+    }
     scanning = true;
     scanBtn.disabled = true;
     urlInput.disabled = true;
     toggleLoading(true);
-    addConsoleLog('info', 'Tarama başlatıldı...');
+    addConsoleLog('info', 'Tarama başlatıldı');
     showToast('safe', 'Tarama başladı');
-
-    // Hız animasyonu
     artificialSpeed = 0;
     animateSpeedIncrease();
 
-    const startTime = performance.now();
+    const t0 = performance.now();
     let result;
     try {
       result = await fetchPrediction(targetUrl);
-      const latency = Math.round(performance.now() - startTime);
-      apiLatency.textContent = latency + ' ms';
-      apiStatus.textContent = 'OK';
-      lastResponse.textContent = new Date().toLocaleTimeString();
-      addConsoleLog('info', 'API yanıt süresi: ' + latency + ' ms');
-    } catch (err) {
+      const latency = Math.round(performance.now() - t0);
+      if (apiLatency) apiLatency.textContent = latency + ' ms';
+      if (lastResponse) lastResponse.textContent = new Date().toLocaleTimeString();
+    } catch (e) {
       errorCount++;
-      errorCountEl.textContent = errorCount;
-      apiStatus.textContent = 'Hata';
-      addConsoleLog('error', 'API isteği başarısız: ' + err.message);
-      showToast('danger', 'API isteği başarısız; sahte sonuç kullanıldı');
+      if (errorCountEl) errorCountEl.textContent = errorCount;
+      if (apiStatus) apiStatus.textContent = 'Hata';
+      addConsoleLog('error', 'API hata: ' + e.message);
+      showToast('danger', 'API isteği başarısız, fallback');
       result = buildFallbackResult(targetUrl);
     }
-
     updateTelemetry(result);
     finalizeScan();
   }
@@ -187,63 +191,90 @@
     artificialSpeed += Math.random() * 14 + 4;
     if (artificialSpeed > 320) artificialSpeed = 320;
     speedValue.textContent = artificialSpeed.toFixed(0).padStart(3, '0');
-    if (artificialSpeed < 320) {
-      requestAnimationFrame(animateSpeedIncrease);
-    }
+    if (artificialSpeed < 320) requestAnimationFrame(animateSpeedIncrease);
   }
 
+  // ---- API ----
   async function fetchPrediction(url) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+    const timeout = setTimeout(() => controller.abort(), 15000);
 
-    const payload = { url };
-    addConsoleLog('info', 'API istek: ' + url);
+    const endpoints = [
+      `${API_BASE}/predict`,
+      `${API_BASE}/api/predict`,
+    ];
 
-    const res = await fetch('/predict', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: controller.signal
-    });
+    let lastErr;
+    for (const ep of endpoints) {
+      try {
+        addConsoleLog('info', 'POST ' + ep);
+        // 1) POST ile dene
+        let res = await fetch(ep, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ url }),
+          signal: controller.signal,
+          mode: 'cors',
+          credentials: 'omit'
+        });
 
-    clearTimeout(timeout);
+        // 405 ise GET moduna düş
+        if (res.status === 405) {
+          addConsoleLog('warn', '405 -> GET moduna düşülüyor: ' + ep);
+          res = await fetch(`${ep}?url=${encodeURIComponent(url)}`, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+            signal: controller.signal,
+            mode: 'cors',
+            credentials: 'omit'
+          });
+        }
 
-    if (!res.ok) {
-      throw new Error('HTTP ' + res.status);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const raw = await res.json();
+        clearTimeout(timeout);
+        addConsoleLog('info', 'API yanıt: ' + JSON.stringify(raw));
+        if (apiStatus) apiStatus.textContent = 'OK';
+        return normalizeApiResponse(raw);
+      } catch (e) {
+        lastErr = e;
+        addConsoleLog('error', `Endpoint hatası (${ep}): ${e.message}`);
+      }
     }
 
-    const data = await res.json();
-    addConsoleLog('info', 'API yanıt alındı.');
-    return normalizeApiResponse(data);
+    clearTimeout(timeout);
+    throw lastErr || new Error('API erişilemedi');
   }
 
   function normalizeApiResponse(data) {
-    // Beklenen alanları esnek şekilde yakala
-    // Olası format: { prediction: 'phishing', probabilities: { benign:0.1, phishing:0.8, malware:0.05, defacement:0.05 } }
-    const pred = data.prediction || data.label || data.class || 'unknown';
-    const probs = data.probabilities || data.probs || {};
-    return {
-      url: data.url || 'N/A',
-      classification: pred,
-      probabilities: {
-        benign: parseFloat(probs.benign ?? probs.benign ?? 0),
-        phishing: parseFloat(probs.phishing ?? probs.phishing ?? 0),
-        malware: parseFloat(probs.malware ?? probs.malware ?? 0),
-        defacement: parseFloat(probs.defacement ?? probs.defacement ?? probs.deface ?? 0)
+    if (!data || typeof data !== 'object') {
+      return buildFallbackResult('N/A');
+    }
+    const rawPred = (data.prediction || data.label || data.class || data.result || 'unknown').toString().toLowerCase();
+    const probsRaw = data.probabilities || data.probs || data.scores || data.proba || {};
+    const get = (...keys) => {
+      for (const k of keys) {
+        if (probsRaw[k] !== undefined && probsRaw[k] !== null) return parseFloat(probsRaw[k]);
       }
+      return 0;
     };
+    const benign = get('benign', 'safe', 'normal');
+    const phishing = get('phishing', 'phish');
+    const malware = get('malware', 'malicious');
+    const defacement = get('defacement', 'deface', 'defacement_attack');
+    const map = { benign, phishing, malware, defacement };
+    let classification = rawPred;
+    if (!Object.keys(map).includes(classification)) {
+      classification = Object.entries(map).sort((a, b) => b[1] - a[1])[0][0];
+    }
+    return { url: data.url || data.target || 'N/A', classification, probabilities: map };
   }
 
   function buildFallbackResult(url) {
     return {
       url,
       classification: 'benign',
-      probabilities: {
-        benign: 0.82,
-        phishing: 0.09,
-        malware: 0.05,
-        defacement: 0.04
-      }
+      probabilities: { benign: 0.82, phishing: 0.09, malware: 0.05, defacement: 0.04 }
     };
   }
 
@@ -256,73 +287,59 @@
     toggleLoading(false);
     speedValue.textContent = '000';
     artificialSpeed = 0;
-    addConsoleLog('info', 'Tarama tamamlandı.');
+    addConsoleLog('info', 'Tarama tamamlandı');
   }
 
   function toggleLoading(flag) {
     loadingState.classList.toggle('hidden', !flag);
   }
 
-  // ---- Telemetri Güncelleme ----
+  // ---- Telemetry ----
   function updateTelemetry(result) {
     telemetryPanel.classList.remove('hidden');
     const { classification, probabilities } = result;
-
     metricClassification.textContent = classification.toUpperCase();
     const conf = computeConfidence(probabilities, classification);
     metricConfidence.textContent = (conf * 100).toFixed(1) + '%';
-
     metricPhishing.textContent = (probabilities.phishing * 100).toFixed(1) + '%';
     metricMalware.textContent = (probabilities.malware * 100).toFixed(1) + '%';
     metricDeface.textContent = (probabilities.defacement * 100).toFixed(1) + '%';
-
-    // Tehdit seviyesi: benign hariç en yüksek risk
     const threatScore = Math.max(probabilities.phishing, probabilities.malware, probabilities.defacement);
     metricThreatLevel.textContent = (threatScore * 100).toFixed(1) + '%';
-
     moveLinearGauge(threatScore);
     moveCircularDial(threatScore);
     updateTelemetrySignal(threatScore, classification);
-
-    addConsoleLog('info', `Sınıflandırma: ${classification}, Tehdit Skor: ${(threatScore * 100).toFixed(1)}%`);
-
-    // Radar pingi ekle (risk arttıkça daha büyük)
-    const xp = 15 + Math.random() * 70;
-    const yp = 15 + Math.random() * 70;
-    placePing(xp, yp, threatScore);
-
-    // Toast
+    addConsoleLog('info', `CLS=${classification} THREAT=${(threatScore * 100).toFixed(1)}%`);
+    placePing(15 + Math.random() * 70, 15 + Math.random() * 70, threatScore);
     if (classification === 'benign') {
-      showToast('safe', 'URL güvenli görünüyor.');
+      showToast('safe', 'URL güvenli');
     } else if (threatScore > 0.6) {
-      showToast('danger', 'Yüksek tehdit algılandı: ' + classification);
+      showToast('danger', 'Yüksek tehdit: ' + classification);
     } else {
       showToast('warn', 'Orta risk: ' + classification);
     }
   }
 
   function computeConfidence(probs, classification) {
-    const key = classification.toLowerCase();
-    return probs[key] !== undefined ? probs[key] : 0;
+    const k = classification.toLowerCase();
+    return probs[k] !== undefined ? probs[k] : 0;
   }
 
   function moveLinearGauge(threatScore) {
-    const percent = threatScore * 100;
-    const trackWidth = document.getElementById('linearGauge').offsetWidth;
-    const offset = (percent / 100) * (trackWidth - 8);
+    const track = id('linearGauge');
+    if (!track) return;
+    const trackWidth = track.offsetWidth;
+    const offset = threatScore * (trackWidth - 8);
     gaugeNeedle.style.left = Math.max(4, offset) + 'px';
   }
 
   function moveCircularDial(threatScore) {
-    // 0 -> -45deg (safe), 1 -> 225deg (danger) aralığı
-    const minDeg = -45;
-    const maxDeg = 225;
-    const angle = minDeg + (maxDeg - minDeg) * threatScore;
+    const angle = -45 + 270 * threatScore;
     dialNeedle.style.transform = `translate(-50%,-100%) rotate(${angle}deg)`;
   }
 
   function updateTelemetrySignal(threatScore, classification) {
-    telemetrySignal.classList.remove('offline', 'idle');
+    telemetrySignal.className = 'telemetry-signal';
     if (classification === 'benign' && threatScore < 0.3) {
       telemetrySignal.style.background = 'var(--status-safe)';
     } else if (threatScore < 0.6) {
@@ -334,8 +351,8 @@
     }
   }
 
-  // ---- Konsol Log ----
-  function addConsoleLog(type, message) {
+  // ---- Console / Toast ----
+  function addConsoleLog(type, msg) {
     const line = document.createElement('div');
     line.className = 'log-line';
     const ts = document.createElement('div');
@@ -343,94 +360,64 @@
     ts.textContent = new Date().toLocaleTimeString();
     const ev = document.createElement('div');
     ev.className = 'log-event ' + type;
-    ev.textContent = message;
-    line.appendChild(ts);
-    line.appendChild(ev);
+    ev.textContent = msg;
+    line.appendChild(ts); line.appendChild(ev);
     consoleStream.appendChild(line);
     consoleStream.scrollTop = consoleStream.scrollHeight;
   }
 
-  // ---- Toast ----
   function showToast(kind, text) {
     const toast = document.createElement('div');
     toast.className = 'toast ' + kind;
-    toast.innerHTML = `
-      <span style="font-weight:700;">${kind.toUpperCase()}</span>
+    toast.innerHTML = `<span style="font-weight:700;">${kind.toUpperCase()}</span>
       <span style="flex:1;">${text}</span>
-      <button class="toast-close" aria-label="Kapat">×</button>
-    `;
+      <button class="toast-close" aria-label="Kapat">×</button>`;
     toastStack.appendChild(toast);
-    const closer = toast.querySelector('.toast-close');
-    closer.addEventListener('click', () => toast.remove());
-    setTimeout(() => {
-      if (toast.isConnected) toast.remove();
-    }, 6000);
+    toast.querySelector('.toast-close').addEventListener('click', () => toast.remove());
+    setTimeout(() => { if (toast.isConnected) toast.remove(); }, 6000);
   }
 
-  // ---- Modal ----
-  function openModal(title, htmlContent) {
+  // ---- Modal / Theme / Help ----
+  function openModal(title, html) {
     modalTitle.textContent = title;
-    modalBody.innerHTML = htmlContent;
+    modalBody.innerHTML = html;
     modalOverlay.classList.remove('hidden');
   }
+  function closeModal() { modalOverlay.classList.add('hidden'); }
 
-  function closeModal() {
-    modalOverlay.classList.add('hidden');
-  }
-
-  // ---- Tema / Debug ----
   function toggleTheme() {
-    if (themeMode === 'dark') {
-      document.body.classList.add('theme-pit');
-      themeMode = 'pit';
-    } else {
-      document.body.classList.remove('theme-pit');
-      themeMode = 'dark';
-    }
+    if (themeMode === 'dark') { document.body.classList.add('theme-pit'); themeMode = 'pit'; }
+    else { document.body.classList.remove('theme-pit'); themeMode = 'dark'; }
     themeStateEl.textContent = themeMode;
-    document.getElementById('statusTheme').textContent = themeMode.toUpperCase();
+    const st = id('statusTheme'); if (st) st.textContent = themeMode.toUpperCase();
     showToast('safe', 'Tema: ' + themeMode);
   }
+  function toggleDebugOutline() { document.body.classList.toggle('outline-debug'); }
 
-  function toggleDebugOutline() {
-    document.body.classList.toggle('outline-debug');
-  }
-
-  // ---- Yardım Modal İçeriği ----
   function showHelpModal() {
-    openModal(
-      'Yardım / Kılavuz',
-      `
-      <p><strong>Tarama:</strong> URL girip "Tarama Başlat" butonuna basın veya Enter tuşu.</p>
-      <p><strong>Tema Değiştir:</strong> Koyu / pit modu arası geçiş.</p>
-      <p><strong>Debug Çerçeve:</strong> Öğelerin kenarlarını incelemek için.</p>
-      <p><strong>Gauge & Dial:</strong> Tehdit olasılığı lineer ve dairesel göstergelerde yansır.</p>
-      <p><strong>Radar Ping:</strong> Tehdit seviyesi arttıkça ping boyutu artar.</p>
-      <p><strong>Performans:</strong> Ağ hatasında sahte (fallback) sonuç kullanılır.</p>
-      `
-    );
+    openModal('Yardım', `
+      <p><strong>Tarama:</strong> Backend çalışıyor olmalı (uvicorn app.main:app --port ${DEFAULT_PORT}).</p>
+      <p><strong>URL gir:</strong> https://...</p>
+      <p><strong>Enter:</strong> Hızlı tarama.</p>
+      <p><strong>Gauge/Dial:</strong> En yüksek tehdit alt sınıflardan.</p>
+      <p><strong>Fallback:</strong> Ağ hatasında sahte değerler.</p>
+    `);
   }
 
-  // ---- Event Binding ----
+  // ---- Events ----
   function bindEvents() {
-    scanBtn.addEventListener('click', startScan);
-    urlInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') startScan();
-    });
-    themeBtn.addEventListener('click', toggleTheme);
-    debugBtn.addEventListener('click', toggleDebugOutline);
-    modalCloseBtn.addEventListener('click', closeModal);
-    // Yardım için çift tıklama statusSecurity
-    document.getElementById('statusSecurity').addEventListener('dblclick', showHelpModal);
+    scanBtn && scanBtn.addEventListener('click', startScan);
+    urlInput && urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') startScan(); });
+    themeBtn && themeBtn.addEventListener('click', toggleTheme);
+    debugBtn && debugBtn.addEventListener('click', toggleDebugOutline);
+    modalCloseBtn && modalCloseBtn.addEventListener('click', closeModal);
+    const sec = id('statusSecurity'); sec && sec.addEventListener('dblclick', showHelpModal);
   }
 
-  // ---- Yardımcı ----
-  function setText(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = value;
-  }
+  // ---- Utils ----
+  function id(x) { return document.getElementById(x); }
+  function setText(x, v) { const el = id(x); if (el) el.textContent = v; }
 
-  // Başlat
+  // ---- Start ----
   init();
-
 })();

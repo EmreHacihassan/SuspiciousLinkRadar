@@ -11,48 +11,24 @@
   <div class="cockpit">
     <!-- LEFT WING -->
     <div class="left-wing">
-      <div class="system-badge">
-        <span class="led-indicator pulse"></span>
-        CORE
-      </div>
+      <div class="system-badge"><span class="led-indicator pulse"></span>CORE</div>
       <div class="vertical-divider"></div>
-
       <div class="speed-meter" id="speedMeter">
         <div class="speed-label">SCAN HIZI</div>
         <div class="speed-value" id="speedValue">000</div>
         <div class="speed-unit">KM/H</div>
       </div>
-
       <div class="info-module">
         <div class="module-header">DATA</div>
-        <div class="module-stat">
-          <span class="stat-label">Kaynak CSV</span>
-          <span class="stat-value" id="dataSource">malicious_phish.csv</span>
-        </div>
-        <div class="module-stat">
-          <span class="stat-label">Toplam Kayıt</span>
-          <span class="stat-value" id="totalRecords">—</span>
-        </div>
-        <div class="module-stat">
-          <span class="stat-label">Model Versiyon</span>
-          <span class="stat-value" id="modelVersion">v1.0</span>
-        </div>
+        <div class="module-stat"><span class="stat-label">Kaynak CSV</span><span class="stat-value" id="dataSource">malicious_phish.csv</span></div>
+        <div class="module-stat"><span class="stat-label">Toplam Kayıt</span><span class="stat-value" id="totalRecords">—</span></div>
+        <div class="module-stat"><span class="stat-label">Model Versiyon</span><span class="stat-value" id="modelVersion">v1.0</span></div>
       </div>
-
       <div class="info-module">
         <div class="module-header">DURUM</div>
-        <div class="module-stat">
-          <span class="stat-label">API</span>
-          <span class="stat-value" id="apiStatus">Bekleniyor</span>
-        </div>
-        <div class="module-stat">
-          <span class="stat-label">Latency</span>
-          <span class="stat-value" id="apiLatency">— ms</span>
-        </div>
-        <div class="module-stat">
-          <span class="stat-label">Son Yanıt</span>
-          <span class="stat-value" id="lastResponse">—</span>
-        </div>
+        <div class="module-stat"><span class="stat-label">API</span><span class="stat-value" id="apiStatus">Bekleniyor</span></div>
+        <div class="module-stat"><span class="stat-label">Latency</span><span class="stat-value" id="apiLatency">— ms</span></div>
+        <div class="module-stat"><span class="stat-label">Son Yanıt</span><span class="stat-value" id="lastResponse">—</span></div>
       </div>
     </div>
 
@@ -60,13 +36,13 @@
     <main class="command-center">
       <div class="dashboard-header">
         <div class="brand-strip">
-  <img src="/static/logo.svg" alt="Suspicious Link Radar Logo" class="brand-logo" />
-  <div class="brand-name">SUSPICIOUS LINK RADAR</div>
-  <div class="version-tag" id="uiVersion">UI-R2</div>
-</div>
+          <img src="/static/logo.svg" alt="Suspicious Link Radar Logo" class="brand-logo" />
+          <div class="brand-name">SUSPICIOUS LINK RADAR</div>
+          <div class="version-tag" id="uiVersion">UI-R2</div>
+        </div>
         <div class="status-bar">
           <div class="status-item" id="statusSecurity">SECURE</div>
-          <div class="status-item" id="statusMode">NORMAL</div>
+            <div class="status-item" id="statusMode">NORMAL</div>
           <div class="status-item" id="statusTheme">DARK</div>
           <div class="status-item" id="statusPings">PINGS: 0</div>
         </div>
@@ -79,8 +55,8 @@
           <div class="radar-sweep"></div>
           <div class="crosshair"></div>
           <div class="range-ring ring-1"></div>
-            <div class="range-ring ring-2"></div>
-            <div class="range-ring ring-3"></div>
+          <div class="range-ring ring-2"></div>
+          <div class="range-ring ring-3"></div>
           <div class="radar-label">THREAT RADAR</div>
         </div>
       </div>
@@ -94,11 +70,7 @@
             <div class="input-scanner"></div>
           </div>
         </div>
-        <button id="scanBtn" class="engage-button">
-          <span class="btn-icon">▶</span>
-          TARAMA BAŞLAT
-          <span class="btn-glow"></span>
-        </button>
+        <button id="scanBtn" class="engage-button"><span class="btn-icon">▶</span>TARAMA BAŞLAT<span class="btn-glow"></span></button>
         <button id="themeBtn" class="button-secondary">Tema Değiştir</button>
         <button id="debugBtn" class="button-secondary">Debug Çerçeve</button>
       </div>
@@ -110,6 +82,7 @@
           <div id="telemetrySignal" class="telemetry-signal"></div>
         </div>
 
+        <!-- LINEAR GAUGE -->
         <div class="threat-gauge">
           <div class="gauge-track" id="linearGauge">
             <div class="gauge-overlay-fade"></div>
@@ -122,11 +95,13 @@
           </div>
         </div>
 
+        <!-- DIAL -->
         <div class="threat-dial" id="threatDial">
           <div class="dial-needle" id="dialNeedle"></div>
           <div class="dial-center"></div>
         </div>
 
+        <!-- METRICS -->
         <div class="metrics-grid">
           <div class="metric-card">
             <div class="metric-label">Sınıflandırma</div>
@@ -148,79 +123,44 @@
             <div class="metric-label">Malware Olası</div>
             <div class="metric-value" id="metricMalware">—</div>
           </div>
-          <div class="metric-card">
-            <div class="metric-label">Deface Olası</div>
-            <div class="metric-value" id="metricDeface">—</div>
-          </div>
+            <div class="metric-card">
+              <div class="metric-label">Deface Olası</div>
+              <div class="metric-value" id="metricDeface">—</div>
+            </div>
         </div>
       </section>
 
-      <!-- LOADING (dynamic injection) -->
+      <!-- LOADING -->
       <div id="loadingState" class="loading-state hidden">
         <div class="scanner-beam"></div>
         <div class="loading-text">TARANIYOR</div>
       </div>
 
       <!-- CONSOLE STREAM -->
-      <div class="console-stream" id="consoleStream" aria-label="İşlem Günlüğü">
-        <!-- Log lines appended here -->
-      </div>
+      <div class="console-stream" id="consoleStream" aria-label="İşlem Günlüğü"></div>
     </main>
 
     <!-- RIGHT WING -->
     <div class="right-wing">
-      <div class="system-badge">
-        <span class="led-indicator pulse"></span>
-        RADAR
-      </div>
+      <div class="system-badge"><span class="led-indicator pulse"></span>RADAR</div>
       <div class="vertical-divider"></div>
-
       <div class="info-module">
         <div class="module-header">MODEL</div>
-        <div class="module-stat">
-          <span class="stat-label">F1 Test</span>
-          <span class="stat-value" id="metricF1">0.70</span>
-        </div>
-        <div class="module-stat">
-          <span class="stat-label">Eğitim CV</span>
-          <span class="stat-value" id="metricCVF1">0.61</span>
-        </div>
-        <div class="module-stat">
-          <span class="stat-label">Güncelleme</span>
-          <span class="stat-value" id="modelUpdated">2025-11-19</span>
-        </div>
+        <div class="module-stat"><span class="stat-label">F1 Test</span><span class="stat-value" id="metricF1">0.70</span></div>
+        <div class="module-stat"><span class="stat-label">Eğitim CV</span><span class="stat-value" id="metricCVF1">0.61</span></div>
+        <div class="module-stat"><span class="stat-label">Güncelleme</span><span class="stat-value" id="modelUpdated">2025-11-19</span></div>
       </div>
-
       <div class="info-module">
         <div class="module-header">OTURUM</div>
-        <div class="module-stat">
-          <span class="stat-label">Tarama Sayısı</span>
-          <span class="stat-value" id="scanCount">0</span>
-        </div>
-        <div class="module-stat">
-          <span class="stat-label">Hata</span>
-          <span class="stat-value" id="errorCount">0</span>
-        </div>
-        <div class="module-stat">
-          <span class="stat-label">Tema</span>
-          <span class="stat-value" id="themeState">dark</span>
-        </div>
+        <div class="module-stat"><span class="stat-label">Tarama Sayısı</span><span class="stat-value" id="scanCount">0</span></div>
+        <div class="module-stat"><span class="stat-label">Hata</span><span class="stat-value" id="errorCount">0</span></div>
+        <div class="module-stat"><span class="stat-label">Tema</span><span class="stat-value" id="themeState">dark</span></div>
       </div>
-
       <div class="info-module">
         <div class="module-header">YARDIM</div>
-        <div class="module-stat">
-          <span class="stat-label">Kısayol</span>
-          <span class="stat-value">Enter = Tara</span>
-        </div>
-        <div class="module-stat">
-          <span class="stat-label">Tema</span>
-          <span class="stat-value">Tema Değiştir</span>
-        </div>
-        <div class="module-stat">
-          <span class="stat-label">Debug</span>
-          <span class="stat-value">Çerçeve</span>
-        </div>
+        <div class="module-stat"><span class="stat-label">Kısayol</span><span class="stat-value">Enter = Tara</span></div>
+        <div class="module-stat"><span class="stat-label">Tema</span><span class="stat-value">Tema Değiştir</span></div>
+        <div class="module-stat"><span class="stat-label">Debug</span><span class="stat-value">Çerçeve</span></div>
       </div>
     </div>
   </div>
@@ -228,7 +168,7 @@
   <!-- TOAST STACK -->
   <div class="toast-stack" id="toastStack" aria-live="polite"></div>
 
-  <!-- MODAL OVERLAY (hidden by default) -->
+  <!-- MODAL OVERLAY -->
   <div class="modal-overlay hidden" id="modalOverlay">
     <div class="modal-content">
       <div class="modal-title" id="modalTitle">Başlık</div>
