@@ -1,74 +1,109 @@
-﻿from __future__ import annotations
+﻿"""
+Model yükleme ve tahmin (UI ile uyumlu standart çıktı).
+"""
+from __future__ import annotations
+from pathlib import Path
+from typing import Dict, Any, Optional
 
-from typing import Dict, Any, Tuple
-
-import joblib
 import numpy as np
+import joblib
 
+from slr.utils.url import normalize_url
 from slr.features.extractor import extract
+from slr.features.config import FEATURE_NAMES, to_vector, LABEL_MAP as IDX2LABEL
 
+CLASSES = ["benign", "phishing", "malware", "defacement"]
 
-def load_artifact(path: str) -> Dict[str, Any]:
-    return joblib.load(path)
+__all__ = ["load_artifact", "predict_url"]
 
+def _project_root() -> Path:
+    # slr/models/infer.py → .. / .. / (repo root)
+    return Path(__file__).resolve().parents[2]
 
-def _vectorize(features: Dict[str, float], feature_names) -> np.ndarray:
-    return np.array([float(features.get(name, 0.0)) for name in feature_names], dtype=float).reshape(1, -1)
+def load_artifact(path: Optional[str] = None) -> Dict[str, Any]:
+    """
+    models/model_v1.0.pkl dosyasını yükler.
+    Dönen sözlük beklenen anahtarlar: model, feature_names, feature_version, label_map
+    """
+    if path is None:
+        path = str(_project_root() / "models" / "model_v1.0.pkl")
+    artifact = joblib.load(path)
+    # Güçlü doğrulama (opsiyonel anahtarlar yoksa varsayılan ata)
+    if "label_map" not in artifact:
+        artifact["label_map"] = IDX2LABEL
+    if "feature_names" not in artifact:
+        artifact["feature_names"] = FEATURE_NAMES
+    return artifact
 
+def _softmax(x: np.ndarray) -> np.ndarray:
+    x = np.asarray(x, dtype=float)
+    x = x - np.max(x, axis=-1, keepdims=True)
+    e = np.exp(x)
+    s = e / np.maximum(e.sum(axis=-1, keepdims=True), 1e-12)
+    return s
 
-def _softmax(scores: np.ndarray) -> np.ndarray:
-    s = scores - scores.max(axis=1, keepdims=True)
-    exps = np.exp(s)
-    return exps / np.clip(exps.sum(axis=1, keepdims=True), 1e-12, None)
-
-
-def _class_probabilities(model, X: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def _proba_from_model(model, X: np.ndarray) -> np.ndarray:
     if hasattr(model, "predict_proba"):
-        probs = model.predict_proba(X)
-        classes_ = getattr(model, "classes_", np.arange(probs.shape[1]))
-        return probs, classes_
+        p = model.predict_proba(X)
+        return np.asarray(p, dtype=float)
     if hasattr(model, "decision_function"):
-        scores = model.decision_function(X)
-        if scores.ndim == 1:
-            scores = np.vstack([-scores, scores]).T
-        probs = _softmax(scores)
-        classes_ = getattr(model, "classes_", np.arange(probs.shape[1]))
-        return probs, classes_
-    preds = model.predict(X)
-    classes_ = getattr(model, "classes_", np.unique(preds))
-    probs = np.zeros((preds.shape[0], len(classes_)), dtype=float)
-    for i, c in enumerate(classes_):
-        probs[:, i] = (preds == c).astype(float)
-    return probs, classes_
+        s = model.decision_function(X)
+        if s.ndim == 1:
+            s = np.vstack([-s, s]).T
+        return _softmax(s)
+    # fallback: sabit olasılıklar
+    k = getattr(model, "classes_", [0, 1])
+    out = np.full((X.shape[0], len(k)), 1.0 / len(k), dtype=float)
+    return out
 
+def _build_prob_dict(idx2label: Dict[int, str], vec: np.ndarray) -> Dict[str, float]:
+    prob_dict = {k: 0.0 for k in CLASSES}
+    for i, p in enumerate(vec):
+        lab = idx2label.get(i)  # ör: {0:'benign',1:'defacement',2:'phishing',3:'malware'}
+        if lab in prob_dict:
+            prob_dict[lab] = float(p)
+    # normalizasyon (küçük nümerik sapmalar için)
+    s = sum(prob_dict.values())
+    if s > 0:
+        for k in list(prob_dict.keys()):
+            prob_dict[k] = float(prob_dict[k] / s)
+    return prob_dict
 
-def _risk_policy(label_str: str, prob: float, threshold: float) -> str:
-    if label_str == "benign" and prob >= threshold:
-        return "safe"
-    if label_str != "benign" and prob >= threshold:
-        return "danger"
-    return "caution"
+def predict_url(artifact: Dict[str, Any], url: str, threshold: float = 0.8) -> Dict[str, Any]:
+    """
+    UI ile uyumlu standart çıktı döndürür:
+    {
+      "prediction": "<class>",
+      "probabilities": {"benign":..,"phishing":..,"malware":..,"defacement":..},
+      "probability": <float>,
+      "risk_level": "low|medium|high"
+    }
+    """
+    if not isinstance(url, str) or len(url.strip()) < 3:
+        raise ValueError("url boş olamaz")
+    url_norm = normalize_url(url)
 
+    # Özellik çıkarımı → vektör
+    feats = extract(url_norm)
+    vec = to_vector(feats)  # FEATURE_NAMES sırasına göre
+    X = np.asarray(vec, dtype=float).reshape(1, -1)
 
-def predict_url(artifact: Dict[str, Any], url: str, threshold: float = 0.80) -> Dict[str, Any]:
     model = artifact["model"]
-    feature_names = artifact.get("feature_names")
-    label_map = artifact.get("label_map")
+    idx2label: Dict[int, str] = artifact.get("label_map", IDX2LABEL)
 
-    feats = extract(url)
-    if feature_names is None:
-        feature_names = list(feats.keys())
+    # Olasılıklar
+    proba = _proba_from_model(model, X)[0]  # shape: (K,)
+    probs = _build_prob_dict(idx2label, proba)
 
-    X = _vectorize(feats, feature_names)
-    probs, classes_ = _class_probabilities(model, X)
+    # Karar ve metrikler
+    prediction = max(probs.items(), key=lambda x: x[1])[0]
+    probability = float(probs[prediction])
+    threat_score = max(probs["phishing"], probs["malware"], probs["defacement"])
+    risk_level = "high" if threat_score >= 0.6 else "medium" if threat_score >= 0.3 else "low"
 
-    class_idx = int(classes_[int(np.argmax(probs[0]))])
-    label_str = label_map.get(class_idx, str(class_idx)) if isinstance(label_map, dict) else str(class_idx)
-    prob = float(probs[0, np.argmax(probs[0])])
-
-    risk = _risk_policy(label_str, prob, threshold)
     return {
-        "label": label_str,
-        "probability": round(prob, 6),
-        "risk_level": risk,
+        "prediction": prediction,
+        "probabilities": probs,
+        "probability": probability,
+        "risk_level": risk_level,
     }
